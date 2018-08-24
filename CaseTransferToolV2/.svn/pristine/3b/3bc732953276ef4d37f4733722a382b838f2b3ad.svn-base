@@ -1,0 +1,777 @@
+package com.tansun.casetransfertool.service;
+
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.management.RuntimeErrorException;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+
+import org.apache.poi.hssf.usermodel.HSSFCell;
+import org.apache.poi.hssf.usermodel.HSSFCellStyle;
+import org.apache.poi.hssf.usermodel.HSSFDataFormat;
+import org.apache.poi.hssf.usermodel.HSSFDateUtil;
+import org.apache.poi.hssf.usermodel.HSSFFont;
+import org.apache.poi.hssf.usermodel.HSSFPalette;
+import org.apache.poi.hssf.usermodel.HSSFRow;
+import org.apache.poi.hssf.usermodel.HSSFSheet;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.hssf.util.HSSFColor;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFCell;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFFont;
+import org.apache.poi.xssf.usermodel.XSSFRow;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import com.tansun.casetransfertool.bean.Case;
+import com.tansun.casetransfertool.bean.InputItem;
+import com.tansun.casetransfertool.bean.InterfaceReport;
+import com.tansun.casetransfertool.bean.Trade;
+import com.tansun.casetransfertool.bean.TransferRelation;
+import com.tansun.casetransfertool.utils.PinYin4JUtils;
+
+/**
+ * 
+ * @ClassName: InterfaceCaseService
+ * @Description: 接口案例业务逻辑处理类
+ * @company com.tansun
+ * @author lzx
+ * @date 2017-12-6 上午10:50:34
+ * 
+ */
+public class InterfaceCaseService extends BaseService {
+
+	private static String tradeSeq = "s";
+
+	private static String baseSeq; // 案例编号初始
+
+	private static String baseNature; // 案例性质初始
+
+	private static String baseName; // 案例名称初始
+
+	private static String baseDesc; // 案例描述初始
+
+	private static int reportStart;// 请求报文起始索引
+
+	private static int reportEnd;// 请求报文结束索引
+	
+	private static String baseCaseName;//案例名称
+
+	private static CellStyle cellStyle;
+
+	public static Workbook importCaseToObject(JFrame frame, String fileName) throws Exception {
+		// -------------------------------支持2003和2007板的excel------------------------
+		FileInputStream in = new FileInputStream(fileName);// 获取上传文件流
+		DataInputStream fins = new DataInputStream(in); // 包含数据的数据流
+
+		// excel的类型，支持2003和2007板的excel
+		boolean excelType = fileName.endsWith(".xls") == true ? true : false;
+
+		Workbook wb = getInfo(frame, fins, excelType);
+
+		return wb;
+	}
+
+	public static Workbook getInfo(JFrame frame, DataInputStream fins, boolean excelType) throws Exception {
+		Workbook wb = null;
+		List<Case> cases = new ArrayList<Case>();
+		if (excelType) {
+			wb = new HSSFWorkbook(fins);
+
+		} else {
+			wb = new XSSFWorkbook(fins);
+		}
+
+		return wb;
+	}
+
+	public static boolean validateExcel(Row firstRow, JFrame frame) {
+
+		boolean b = false;
+		String code = getCellValue(firstRow, 0); // 第一行的第一格数据
+		if (!code.equals("案例编号")) {
+			b = true;
+			String seq = excelColIndexToStr(1);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为案例编号");
+		}
+
+		String system = getCellValue(firstRow, 1); // 第一行的第二格数据
+		if (!system.equals("案例名称")) {
+			b = true;
+			String seq = excelColIndexToStr(2);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为案例名称");
+		}
+
+		String function = getCellValue(firstRow, 2); // 第一行的第三格数据
+		if (!function.equals("案例性质")) {
+			b = true;
+			String seq = excelColIndexToStr(3);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为案例性质");
+		}
+
+		String functionName = getCellValue(firstRow, 3); // 第一行的第四格数据
+		if (!functionName.equals("业务名称")) {
+			b = true;
+			String seq = excelColIndexToStr(4);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为业务名称");
+		}
+
+		String tradeCode = getCellValue(firstRow, 4); // 第一行的第四格数据
+		if (!tradeCode.equals("任务名称")) {
+			b = true;
+			String seq = excelColIndexToStr(5);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为任务名称");
+		}
+
+		String input = getCellValue(firstRow, 5); // 第一行的第八格数据
+		if (!input.equals("任务类型")) {
+			b = true;
+			String seq = excelColIndexToStr(6);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为任务类型");
+		}
+
+		String step = getCellValue(firstRow, 6); // 第一行的第四格数据
+		if (!step.equals("请求数据(格式:数据来源|数据值)")) {
+			b = true;
+			String seq = excelColIndexToStr(7);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为请求数据(格式:数据来源|数据值)");
+		}
+
+		String exceptType = getCellValue(firstRow, 7); // 第一行的第四格数据
+		if (!exceptType.equals("预期结果类型")) {
+			b = true;
+			String seq = excelColIndexToStr(8);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为预期结果类型");
+		}
+
+		String exceptResult = getCellValue(firstRow, 8); // 第一行的第四格数据
+		if (!exceptResult.equals("预期结果(格式:数据来源|数据值)")) {
+			b = true;
+			String seq = excelColIndexToStr(9);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为预期结果(格式:数据来源|数据值)");
+		}
+
+		String sql = getCellValue(firstRow, 9); // 第一行的第四格数据
+		if (!sql.equals("SQL语句")) {
+			b = true;
+			String seq = excelColIndexToStr(10);
+			JOptionPane.showMessageDialog(frame, "接口案例表第" + seq + "列应为SQL语句");
+		}
+
+		return b;
+	}
+
+	/**
+	 * 判断指定的单元格是否是合并单元格
+	 * 
+	 * @param sheet
+	 * @param row
+	 *            行下标
+	 * @param column
+	 *            列下标
+	 * @return
+	 */
+	private static boolean isMergedRegionFirstRow(Sheet sheet, int row, int column) {
+		int sheetMergeCount = sheet.getNumMergedRegions();
+		for (int i = 0; i < sheetMergeCount; i++) {
+			CellRangeAddress range = sheet.getMergedRegion(i);
+			int firstColumn = range.getFirstColumn();
+			int lastColumn = range.getLastColumn();
+			int firstRow = range.getFirstRow();
+			// int lastRow = range.getLastRow();
+			if (row == firstRow) {
+				if (column >= firstColumn && column <= lastColumn) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	public static void createNewInterExcel(List<Case> uICases, Workbook wb, Map<String, TransferRelation> transferMap,
+			File file) throws IOException, ParseException {
+		// 获取UI案例的个数 并将 接口案例按照ui案例的个数进行复制
+		createTableContent(wb, uICases, transferMap);
+
+		FileOutputStream fos = null;
+		fos = new FileOutputStream(file);
+		wb.write(fos);
+		fos.close();
+
+	}
+
+	private static void createTableContent(Workbook wb, List<Case> uICases, Map<String, TransferRelation> transferMap)
+			throws ParseException {
+
+		// 获取接口案例的步骤个数
+		Sheet lastSheet = wb.getSheetAt(wb.getNumberOfSheets() - 1);
+		String lastSName = lastSheet.getSheetName();
+		String[] lastSplit = lastSName.split("_");
+		String validateSeq = lastSplit[0];
+
+		// int a=0;
+		for (int sheetIndex = 0; sheetIndex < wb.getNumberOfSheets(); sheetIndex++) {
+
+			Sheet st = wb.getSheetAt(sheetIndex);
+			String sheetName = st.getSheetName();
+			boolean validateSheetName = validateSheetName(sheetName);
+			if (validateSheetName) {
+				String[] split = sheetName.split("_");
+				String i_tradeName = split[1];
+				Integer itradeSeq = Integer.valueOf(split[0].substring(1));
+
+				// 来处理
+				// int a=0;
+				// 先进行案例列的复制
+				for (int i = 0; i <= st.getLastRowNum(); i++) {
+					if (i == 0) {
+						Row firstRow = st.getRow(i); // 第一行案例编号
+						String caseCode = getCellValue(firstRow, 8).trim();
+						String[] split2 = caseCode.split(":");
+						baseSeq = split2[0] + ":";
+						baseCaseName=	caseCode.substring(caseCode.indexOf(":")+1, caseCode.length()-12);
+						// baseSeq =
+						// Integer.parseInt(caseCode.substring(caseCode.lastIndexOf("）")
+						// + 1, caseCode.length()));
+						// 案例编号的生成逻辑 处理?是始终基于样案例还是时间戳
+					} else if (i == 1) {
+						Row secondRow = st.getRow(i); // 第二行案例的性质
+						String caseNature = getCellValue(secondRow, 8).trim();
+						String[] split2 = caseNature.split(":");
+						baseNature = split2[0] + ":";
+					} else if (i == 2) {
+						Row thirdRow = st.getRow(i); // 第三行案例名称
+						String caseName = getCellValue(thirdRow, 8).trim();
+						String[] split2 = caseName.split(":");
+						baseName = split2[0] + ":";
+					} else if (i == 3) {
+						Row fourRow = st.getRow(i);
+						baseDesc = getCellValue(fourRow, 8).trim();
+					}
+
+					Row row = st.getRow(i);
+					if (i >= 4) {
+						String reportInfo = getCellValue(row, 0).trim(); // 获取到第1列的数据
+						if (reportInfo.contains("start)请求报文")) {
+							int rowNum = row.getRowNum();
+							reportStart = rowNum + 2;
+						}
+						if (reportInfo.contains("end)请求报文")) { // 这么之后的数据不做转换
+							int rowNum = row.getRowNum();
+							reportEnd = rowNum - 1;
+						}
+					}
+					// 复制列
+					String caseInfo = getCellValue(row, 8); // 获取到第9列的数据
+					int columnWidth = st.getColumnWidth(8); // 需要复制列的行宽
+
+					Cell cell = row.getCell(8);
+					if (cell != null) {
+						cellStyle = cell.getCellStyle();
+					} else {
+						cellStyle = null;
+					}
+					if (i != 4) { // 第四行的后面的列不创建
+						for (int j = 1; j < uICases.size(); j++) {
+
+							Cell newCell = row.createCell(j + 8);
+							newCell.setCellStyle(cellStyle);
+							st.setColumnWidth(j + 8, columnWidth);
+							newCell.setCellValue(caseInfo);
+						}
+					}
+				}
+				// 替换值的操作
+				for (int rowIndex = 0; rowIndex <= st.getLastRowNum(); rowIndex++) {
+					Row row = st.getRow(rowIndex);
+					// String caseInfo = getCellValue(row, 8); //获取到第9列的数据
+					if (rowIndex == 0) {
+						int seq = 1;
+						Row firstRow = st.getRow(rowIndex); // 第一行案例编号
+						for (int k = 8; k < 8 + uICases.size(); k++) {
+							SimpleDateFormat uiDF = new SimpleDateFormat("yyyyMMdd");
+							String format = uiDF.format(new Date());
+							String valueOf = String.valueOf(seq);
+							if (valueOf.length() < 4) {
+								StringBuilder sb2 = new StringBuilder();
+								for (int l = 0; l < 4; l++) {
+									sb2.append("0");
+								}
+								String str = sb2.toString();
+								valueOf = str.substring(0, 4 - valueOf.length()) + valueOf;
+							}
+							String newCode = baseSeq + baseCaseName + format + valueOf;
+							Cell cell = firstRow.getCell(k);
+							cell.setCellValue(newCode);
+							seq++;
+						}
+					} else if (rowIndex == 1) {
+						Row secondRow = st.getRow(rowIndex); // 第二行案例的性质
+						for (int k = 8; k < 8 + uICases.size(); k++) {
+							Cell cell = secondRow.getCell(k);
+							cell.setCellValue(baseNature + uICases.get(k - 8).getCaseNature());
+						}
+					} else if (rowIndex == 2) {
+						Row thirdRow = st.getRow(rowIndex); // 第三行案例名称
+						for (int k = 8; k < 8 + uICases.size(); k++) {
+							Cell cell = thirdRow.getCell(k);
+							cell.setCellValue(baseName + baseCaseName + "_"
+									+ uICases.get(k - 8).getCaseNature());
+						}
+					} else if (rowIndex == 3) {
+						Row fourRow = st.getRow(rowIndex);
+						baseDesc = getCellValue(fourRow, 8).trim();
+					} else if (rowIndex >= reportStart && rowIndex <= reportEnd) { // 这里是要进行数据值替换的行
+						String dataSource = getCellValue(row, 4).trim(); // 获取到数据来源
+						if (dataSource.equals("常量")) { // 进行替换
+							String icn_name = getCellValue(row, 2).trim(); // 获取接口中文名
+							String u_tradeName = getCurrentTradeName(uICases,itradeSeq);
+							String key = u_tradeName + "," + icn_name;
+							TransferRelation tr = transferMap.get(key); // 获取对应关系表中的数据
+							if (tr != null) {
+								for (int k = 8; k < 8 + uICases.size(); k++) {
+									String inputItemValue = getCellValue(row, k).trim(); // 获取到该值
+									Case uiCase = uICases.get(k - 8);
+									String replaceItemValue = replaceItemValue(inputItemValue, uiCase, validateSeq, tr,
+											itradeSeq);
+									Cell cell = row.getCell(k);
+									cell.setCellValue(replaceItemValue);
+								}
+							}
+						}
+					}
+				}
+			}else{
+				JOptionPane.showMessageDialog(new JFrame(), "接口案例模板 "+sheetName+"页签名称不合法，应以【s数字_】开头！");
+				throw new RuntimeException("接口案例模板 "+sheetName+"页签名称不合法，应以【s数字_】开头！");
+			}
+		}
+	}
+
+	private static String getCurrentTradeName(List<Case> uICases, Integer itradeSeq) {
+		Case uiCase = uICases.get(0);
+		List<Trade> trades = uiCase.getTrades();
+		Trade trade = trades.get(itradeSeq-1);
+		return trade.getOperationStep();
+	}
+
+	private static boolean validateSheetName(String sheetName) {
+		String regex = "^" + tradeSeq + "[1-9][0-9]*_[\\s\\S]*";
+		Pattern r = Pattern.compile(regex);
+		Matcher m = r.matcher(sheetName);
+		return m.matches();
+	}
+
+	private static String replaceItemValue(String inputItemValue, Case uiCase, String validateSeq, TransferRelation tr,
+			Integer itradeSeq) throws ParseException {
+		List<Trade> trades = uiCase.getTrades();
+		if (!validateSeq.equals(tradeSeq + String.valueOf(trades.size()))) {
+			JOptionPane.showMessageDialog(new JFrame(), "UI流程与接口流程步骤个数不一致");
+			throw new RuntimeException();
+		}
+		Trade UItrade = trades.get(itradeSeq - 1);
+		Map<String, String> inputMap = UItrade.getInputItems(); // 获取当前交易的输入项
+		String value = inputMap.get(tr.getU_name());// 获取到ui案例数据项的值
+		if (value != null) {
+			if(value.trim().equals("空值")){
+				value="";
+			}
+			if (tr.getIsTranfer().equals("是")) { // 这个是要将ui的数据进行处理的成相应的接口的
+				if (value.equals("")) {
+					inputItemValue = "";
+				} else {
+					// 然后根据转换关系进行转换
+					if (tr.getTransferDependency().equals("数据格式转换")) {
+						if (tr.getI_dataType().equals("金额类")) {
+							float parseFloat = Float.parseFloat(value);
+							DecimalFormat df = new DecimalFormat("0.00");// 转换格式
+							String format = df.format(parseFloat);
+							String[] split = format.split("\\.");
+							String newValue = split[0] + split[1];
+
+							String length = tr.getI_filedlength();
+							// length = length.substring(0, length.length() -
+							// 1);
+
+							if (newValue.length() < Integer.parseInt(length)) {
+								StringBuilder sb2 = new StringBuilder();
+								for (int k = 0; k < Integer.parseInt(length); k++) {
+									sb2.append("0");
+								}
+								String str = sb2.toString();
+								newValue = str.substring(0, Integer.parseInt(length) - newValue.length()) + newValue;
+							} else {
+								JOptionPane.showMessageDialog(new JFrame(), "金额数据超过" + length + "位!");
+								throw new RuntimeException("金额数据超过" + length + "位!");
+							}
+							inputItemValue = newValue;
+
+							// 金额高于12位
+						} else if (tr.getI_dataType().equals("日期")) {
+							String uiDate = dealDateFormat(tr.getU_dateFormat());
+							SimpleDateFormat uiDF = new SimpleDateFormat(uiDate);
+							String interDate = dealDateFormat(tr.getI_dateFormat());
+							SimpleDateFormat interDF = new SimpleDateFormat(interDate);
+							Date date = uiDF.parse(value);
+							inputItemValue = interDF.format(date);
+						} else {
+							inputItemValue = value;
+						}
+
+					} else if (tr.getTransferDependency().equals("数据映射")) {
+						String maping = tr.getMappingRelation();
+						if (maping == null || "".equals(maping)) {
+							inputItemValue = "";
+						} else {
+							String[] maps = maping.split(";");
+							Map<String, String> moneyType = new HashMap<String, String>();
+							for (String map : maps) {
+								String[] split = map.split("->");
+								moneyType.put(split[0], split[1]);
+							}
+							if (moneyType.get(value) != null && !"".equals(moneyType.get(value))) {
+								inputItemValue = moneyType.get(value);
+							} else {
+								inputItemValue = "";
+							}
+						}
+
+					}
+				}
+			} else {
+				inputItemValue = value;
+			}
+		}
+
+		return inputItemValue;
+	}
+
+	public static String getInputItemValue(String inputItemValue, int j, String tradeName, TransferRelation tr,
+			Case uiCase) throws ParseException {
+		List<Trade> UItrades = uiCase.getTrades();
+		if (UItrades.size() <= j) {
+			JOptionPane.showMessageDialog(new JFrame(), "ui案例交易与接口案例交易个数不一致");
+			throw new RuntimeException();
+		}
+		Trade UItrade = UItrades.get(j);
+		if (tradeName.equals(UItrade.getOperationStep())) {
+			Map<String, String> inputMap = UItrade.getInputItems();
+			String value = inputMap.get(tr.getU_name());// 获取到ui案例数据项的值
+			if (value != null) {
+				if (tr.getIsTranfer().equals("是")) { // 这个是要将ui的数据进行处理的成相应的接口的
+					if (value.equals("")) {
+						inputItemValue = "";
+					} else {
+						// 然后根据转换关系进行转换
+						if (tr.getTransferDependency().equals("数据格式转换")) {
+							if (tr.getI_dataType().equals("金额类")) {
+								float parseFloat = Float.parseFloat(value);
+								DecimalFormat df = new DecimalFormat("0.00");// 转换格式
+								String format = df.format(parseFloat);
+								String[] split = format.split("\\.");
+								String newValue = split[0] + split[1];
+
+								String length = tr.getI_filedlength();
+								length = length.substring(0, length.length() - 1);
+
+								if (newValue.length() < Integer.parseInt(length)) {
+									StringBuilder sb2 = new StringBuilder();
+									for (int k = 0; k < Integer.parseInt(length); k++) {
+										sb2.append("0");
+									}
+									String str = sb2.toString();
+									newValue = str.substring(0, Integer.parseInt(length) - newValue.length())
+											+ newValue;
+								} else {
+									throw new RuntimeException("金额数据超过" + length + "位!");
+								}
+								inputItemValue = newValue;
+
+								// 金额高于12位
+							} else if (tr.getI_dataType().equals("日期")) {
+								String uiDate = dealDateFormat(tr.getU_dateFormat());
+								SimpleDateFormat uiDF = new SimpleDateFormat(uiDate);
+								String interDate = dealDateFormat(tr.getI_dateFormat());
+								SimpleDateFormat interDF = new SimpleDateFormat(interDate);
+								Date date = uiDF.parse(value);
+								inputItemValue = interDF.format(date);
+							}
+						} else if (tr.getTransferDependency().equals("数据映射")) {
+							String maping = tr.getMappingRelation();
+							String[] maps = maping.split(";");
+							Map<String, String> moneyType = new HashMap<String, String>();
+							for (String map : maps) {
+								String[] split = map.split("->");
+								moneyType.put(split[0], split[1]);
+							}
+							if (moneyType.get(value) != null && !"".equals(moneyType.get(value))) {
+								inputItemValue = moneyType.get(value);
+							} else {
+								inputItemValue = "";
+							}
+						}
+					}
+				} else {
+					inputItemValue = value;
+				}
+			}
+		} else {
+			JOptionPane.showMessageDialog(new JFrame(), "ui案例交易与接口案例交易名称不一致");
+			throw new RuntimeException();
+		}
+		return inputItemValue;
+	}
+
+	public static String dealDateFormat(String date) {
+
+		if (date.contains("YYYY")) {
+			date = date.replace("YYYY", "yyyy");
+		}
+
+		if (date.contains("DD")) {
+			date = date.replace("DD", "dd");
+		}
+
+		if (date.contains(":MM")) {
+			date = date.replace(":MM", ":mm");
+		}
+
+		if (date.contains(":SS")) {
+			date = date.replace(":SS", ":ss");
+		}
+
+		return date;
+
+	}
+
+	public static void createTableFirstLine(XSSFWorkbook workBook, XSSFSheet sheet) {
+		// 第一行表头的设置
+		// 灰背景色，横向纵向居中，四周边框
+		XSSFCellStyle titleStyle = workBook.createCellStyle();
+		titleStyle.setAlignment(HSSFCellStyle.ALIGN_LEFT); // 设置单元格的居中
+		titleStyle.setVerticalAlignment(HSSFCellStyle.VERTICAL_CENTER);
+		titleStyle.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
+		titleStyle.setFillForegroundColor(HSSFColor.PALE_BLUE.index); // 设置填充色
+		// workBook.getC
+		titleStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+		titleStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+		titleStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+		titleStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+
+		// 灰背景色，横向纵向居中，四周边框
+		XSSFCellStyle firstStyle = workBook.createCellStyle();
+		firstStyle.setAlignment(HSSFCellStyle.ALIGN_LEFT); // 设置单元格的居中
+		firstStyle.setVerticalAlignment(HSSFCellStyle.VERTICAL_CENTER);
+		// firstStyle.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
+		// firstStyle.setFillForegroundColor(HSSFColor.GREY_25_PERCENT.index);
+		// // 设置填充色
+		firstStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+		firstStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+		firstStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+		firstStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+
+		XSSFCellStyle specialStyle = workBook.createCellStyle();
+		specialStyle.setAlignment(HSSFCellStyle.ALIGN_LEFT); // 设置单元格的居中
+		specialStyle.setVerticalAlignment(HSSFCellStyle.VERTICAL_CENTER);
+		specialStyle.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
+		specialStyle.setFillForegroundColor(HSSFColor.RED.index); // 设置填充色
+		specialStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+		specialStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+		specialStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+		specialStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+
+		// 黑色加粗字体
+		XSSFFont titleFont = workBook.createFont();
+		titleFont.setColor(HSSFColor.BLACK.index); // 字体颜色
+		// titleFont.setBoldweight(HSSFFont.BOLDWEIGHT_NORMAL);
+		titleFont.setFontName("宋体");
+		titleFont.setFontHeightInPoints((short) 10); // 设置字体的大小
+		firstStyle.setFont(titleFont);
+		titleStyle.setFont(titleFont);
+		specialStyle.setFont(titleFont);
+
+		XSSFRow row = sheet.createRow(0);
+		row.setHeightInPoints(15);
+		XSSFCell cell = row.createCell(0);
+		cell.setCellValue("注：淡蓝色列可编辑数据,红色列请勿修改");
+		cell.setCellStyle(firstStyle);
+		sheet.setColumnWidth(0, 3660);
+
+		cell = row.createCell(1);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(1, 3660);
+
+		cell = row.createCell(2);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(2, 3660);
+
+		cell = row.createCell(3);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(3, 3660);
+
+		cell = row.createCell(4);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(4, 7500);
+
+		cell = row.createCell(5);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(5, 3660);
+
+		cell = row.createCell(6);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(6, 7500);
+
+		cell = row.createCell(7);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(7, 7500);
+
+		cell = row.createCell(8);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(8, 7500);
+
+		cell = row.createCell(9);
+		cell.setCellStyle(titleStyle);
+		sheet.setColumnWidth(9, 7500);
+
+		XSSFRow titleRow = sheet.createRow(1);
+		titleRow.setHeightInPoints(15);
+		XSSFCell cell0 = titleRow.createCell(0);
+		cell0.setCellValue("案例编号");
+		cell0.setCellStyle(titleStyle);
+
+		XSSFCell cell1 = titleRow.createCell(1);
+		cell1.setCellValue("案例名称");
+		cell1.setCellStyle(titleStyle);
+
+		XSSFCell cell2 = titleRow.createCell(2);
+		cell2.setCellValue("案例性质");
+		cell2.setCellStyle(titleStyle);
+
+		XSSFCell cell3 = titleRow.createCell(3);
+		cell3.setCellValue("业务名称");
+		cell3.setCellStyle(specialStyle);
+
+		XSSFCell cell4 = titleRow.createCell(4);
+		cell4.setCellValue("任务名称");
+		cell4.setCellStyle(specialStyle);
+
+		XSSFCell cell5 = titleRow.createCell(5);
+		cell5.setCellValue("任务类型");
+		cell5.setCellStyle(specialStyle);
+
+		XSSFCell cell6 = titleRow.createCell(6);
+		cell6.setCellValue("请求数据(格式:数据来源|数据值)");
+		cell6.setCellStyle(titleStyle);
+
+		XSSFCell cell7 = titleRow.createCell(7);
+		cell7.setCellValue("预期结果类型");
+		cell7.setCellStyle(titleStyle);
+
+		XSSFCell cell8 = titleRow.createCell(8);
+		cell8.setCellValue("预期结果(格式:数据来源|数据值)");
+		cell8.setCellStyle(titleStyle);
+
+		XSSFCell cell9 = titleRow.createCell(9);
+		cell9.setCellValue("SQL语句");
+		cell9.setCellStyle(titleStyle);
+	}
+
+	public static XSSFCellStyle setCellsFormateV(XSSFWorkbook workBook, XSSFSheet sheet) {
+		// 普通单元格的样式，横向、纵向居中，文字可换行，四周边框
+		XSSFCellStyle mergStyle = workBook.createCellStyle();
+		mergStyle.setWrapText(true);
+		mergStyle.setAlignment(HSSFCellStyle.ALIGN_LEFT);
+		mergStyle.setVerticalAlignment(HSSFCellStyle.VERTICAL_CENTER);
+		mergStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+		mergStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+		mergStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+		mergStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+
+		XSSFFont titleFont = workBook.createFont();
+		titleFont.setColor(HSSFColor.BLACK.index); // 字体颜色
+		// titleFont.setBoldweight(HSSFFont.BOLDWEIGHT_NORMAL);
+		titleFont.setFontName("宋体");
+		titleFont.setFontHeightInPoints((short) 10); // 设置字体的大小
+		mergStyle.setFont(titleFont);
+		// titleStyle.setFont(titleFont);
+		// specialStyle.setFont(titleFont);
+		// 设置单元格数据格式 为文本
+		mergStyle.setDataFormat(HSSFDataFormat.getBuiltinFormat("@"));
+
+		return mergStyle;
+	}
+
+	public static XSSFCellStyle setCaseFormateV(XSSFWorkbook workBook, XSSFSheet sheet) {
+		// 普通单元格的样式，横向、纵向居中，文字可换行，四周边框
+		XSSFCellStyle mergStyle = workBook.createCellStyle();
+		mergStyle.setWrapText(true);
+		mergStyle.setAlignment(HSSFCellStyle.ALIGN_CENTER);
+		mergStyle.setVerticalAlignment(HSSFCellStyle.VERTICAL_CENTER);
+		mergStyle.setBorderTop(HSSFCellStyle.BORDER_THIN);
+		mergStyle.setBorderBottom(HSSFCellStyle.BORDER_THIN);
+		mergStyle.setBorderLeft(HSSFCellStyle.BORDER_THIN);
+		mergStyle.setBorderRight(HSSFCellStyle.BORDER_THIN);
+
+		XSSFFont titleFont = workBook.createFont();
+		titleFont.setColor(HSSFColor.BLACK.index); // 字体颜色
+		// titleFont.setBoldweight(HSSFFont.BOLDWEIGHT_NORMAL);
+		titleFont.setFontName("宋体");
+		titleFont.setFontHeightInPoints((short) 10); // 设置字体的大小
+		mergStyle.setFont(titleFont);
+		// titleStyle.setFont(titleFont);
+		// specialStyle.setFont(titleFont);
+		// 设置单元格数据格式 为文本
+		mergStyle.setDataFormat(HSSFDataFormat.getBuiltinFormat("@"));
+
+		return mergStyle;
+	}
+
+	public static void setTradeCellStyle(int crow, int firstRow, XSSFSheet sheet, XSSFCellStyle xssfCellStyle) {
+		for (int c = firstRow; c < crow; c++) {
+			XSSFRow row = sheet.getRow(c);
+			XSSFCell cell = row.createCell(3);
+			cell.setCellStyle(xssfCellStyle);
+		}
+		// 规则
+		sheet.addMergedRegion(new CellRangeAddress(firstRow, crow - 1, 3, 3));
+	}
+
+	public static void setCaseCellStyle(int crow, int firstRow, XSSFSheet sheet, XSSFCellStyle xssfCellStyle) {
+		for (int c = firstRow; c < crow; c++) {
+			XSSFRow row = sheet.getRow(c);
+			row.setHeightInPoints(50);
+			XSSFCell cell = row.createCell(0);
+			cell.setCellStyle(xssfCellStyle);
+			cell = sheet.getRow(c).createCell(1);
+			cell.setCellStyle(xssfCellStyle);
+			cell = sheet.getRow(c).createCell(2);
+			cell.setCellStyle(xssfCellStyle);
+		}
+		for (int h = 0; h < 3; h++) {
+			sheet.addMergedRegion(new CellRangeAddress(firstRow, crow - 1, h, h));
+		}
+	}
+
+}

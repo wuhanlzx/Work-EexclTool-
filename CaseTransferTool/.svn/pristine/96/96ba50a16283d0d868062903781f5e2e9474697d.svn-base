@@ -1,0 +1,248 @@
+package com.tansun.casetransfertool.service;
+
+import java.io.DataInputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+
+import org.apache.poi.hssf.usermodel.HSSFDateUtil;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import com.tansun.casetransfertool.bean.Case;
+import com.tansun.casetransfertool.bean.Trade;
+
+/**
+ * 
+ * @ClassName: UICaseService
+ * @Description: UI案例业务逻辑处理类
+ * @company com.tansun
+ * @author lzx
+ * @date 2017-12-6 上午10:51:33
+ * 
+ */
+public class UICaseService extends BaseService {
+
+	public static List<Case> importCaseToObject(JFrame frame, String fileName) throws IOException {
+
+		// -------------------------------支持2003和2007板的excel------------------------
+		FileInputStream in = new FileInputStream(fileName);// 获取上传文件流
+		DataInputStream fins = new DataInputStream(in); // 包含数据的数据流
+
+		// excel的类型，支持2003和2007板的excel
+		boolean excelType = fileName.endsWith(".xls") == true ? true : false;
+
+		List<Case> cases = getInfo(frame, fins, excelType);
+
+		return cases;
+	}
+
+	public static List<Case> getInfo(JFrame frame, DataInputStream fins, boolean excelType) throws IOException {
+		Workbook wb = null;
+		// Cell cell = null;
+		List<Case> cases = new ArrayList<Case>();
+		if (excelType) {
+			wb = new HSSFWorkbook(fins);
+
+		} else {
+			wb = new XSSFWorkbook(fins);
+		}
+		// 便利sheet页
+		for (int sheetIndex = 0; sheetIndex < wb.getNumberOfSheets(); sheetIndex++) {
+
+			Sheet st = wb.getSheetAt(sheetIndex); // 获取当前的sheet页
+			Row firstRow = st.getRow(0); // 获取首行
+			boolean b = validateExcel(firstRow, frame); // 校验首行
+			if (b) {
+				throw new RuntimeException("UI案例Excel文件校验失败!");
+			}
+			// 直接从第二行开始 第一行的数据是表头不需要
+			// 遍利所有的行
+			for (int rowIndex = 1; rowIndex <= st.getLastRowNum(); rowIndex++) {
+
+				Row row = st.getRow(rowIndex);
+				// 一行数据就是一个案例
+				if (row == null) {
+					continue;
+				}
+
+				boolean isMerge = isMergedRegionFirstRow(st, rowIndex, 0);
+				// 判断是否具有合并单元格
+				Case UICase = null;
+				if (isMerge) {
+					UICase = new Case();
+					UICase.setCaseCode(getExcelCellValue(row.getCell(0))); // 案例编号
+					UICase.setSystemNameAndVersion(getExcelCellValue(row.getCell(1))); // 系统名称版本
+					UICase.setFunctionModule(getExcelCellValue(row.getCell(2))); // 功能模块
+					UICase.setFunctionName(getExcelCellValue(row.getCell(3))); // 功能名称
+					UICase.setCaseType(getExcelCellValue(row.getCell(11))); // 案例类型
+					UICase.setCaseNature(getExcelCellValue(row.getCell(12))); // 案例性质
+					UICase.setPriorityLevel(getExcelCellValue(row.getCell(13))); // 优先级
+					UICase.setCreater(getExcelCellValue(row.getCell(14))); // 创建人
+					UICase.setCreateDate(getExcelCellValue(row.getCell(15))); // 创建日期
+					cases.add(UICase);
+				} else {
+					UICase = cases.get(cases.size() - 1);
+				}
+				// 交易码
+				Trade trade = new Trade();
+				trade.setTradeCode(getExcelCellValue(row.getCell(4)));
+
+				// 输入项
+				String value = getExcelCellValue(row.getCell(7));
+				Map<String, String> inputItems = new HashMap<String, String>();
+				String itemExcels[] = value.split("\\r?\\n"); // 对于多行的数据使用换行符进行分割
+				for (String inputDate : itemExcels) {
+					if (inputDate.endsWith("：")) {
+						inputDate = inputDate.substring(0, inputDate.indexOf("："));
+						inputItems.put(inputDate, "");
+					} else {
+						String[] input = inputDate.split("："); // 使用: 进行分割
+						inputItems.put(input[0], input[1]);
+					}
+				}
+				trade.setInputItems(inputItems);
+				// 操作步骤
+				trade.setOperationStep(getExcelCellValue(row.getCell(8)));
+				UICase.addTrade(trade);// 将交易添加到案例中
+			}
+
+		}
+		return cases;
+	}
+
+	public static boolean validateExcel(Row firstRow, JFrame frame) {
+		boolean b = false;
+		String code = getCellValue(firstRow, 0); // 第一行的第一格数据
+		if (!code.equals("案例编号*")) {
+			String seq = excelColIndexToStr(1);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为案例编号*");
+			b = true;
+		}
+
+		String system = getCellValue(firstRow, 1); // 第一行的第二格数据
+		if (!system.equals("系统名称+版本")) {
+			String seq = excelColIndexToStr(2);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为系统名称+版本");
+			b = true;
+			;
+		}
+
+		String function = getCellValue(firstRow, 2); // 第一行的第三格数据
+		if (!function.equals("功能模块")) {
+			String seq = excelColIndexToStr(3);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为功能模块");
+			b = true;
+			;
+		}
+
+		String functionName = getCellValue(firstRow, 3); // 第一行的第四格数据
+		if (!functionName.equals("功能名称*")) {
+			String seq = excelColIndexToStr(4);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为功能名称*");
+			b = true;
+			;
+		}
+
+		String tradeCode = getCellValue(firstRow, 4); // 第一行的第四格数据
+		if (!tradeCode.equals("交易码")) {
+			String seq = excelColIndexToStr(5);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为交易码");
+			b = true;
+			;
+		}
+
+		String input = getCellValue(firstRow, 7); // 第一行的第八格数据
+		if (!input.equals("输入项值")) {
+			String seq = excelColIndexToStr(8);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为输入项值");
+			b = true;
+			;
+		}
+
+		String step = getCellValue(firstRow, 8); // 第一行的第四格数据
+		if (!step.equals("操作步骤*")) {
+			String seq = excelColIndexToStr(9);
+			JOptionPane.showMessageDialog(frame, "UI案例表第" + seq + "列应为操作步骤*");
+			b = true;
+			;
+		}
+
+		return b;
+	}
+
+	/**
+	 * 判断指定的单元格是否是合并单元格
+	 * 
+	 * @param sheet
+	 * @param row
+	 *            行下标
+	 * @param column
+	 *            列下标
+	 * @return
+	 */
+	private static boolean isMergedRegionFirstRow(Sheet sheet, int row, int column) {
+		int sheetMergeCount = sheet.getNumMergedRegions();
+		for (int i = 0; i < sheetMergeCount; i++) {
+			CellRangeAddress range = sheet.getMergedRegion(i);
+			int firstColumn = range.getFirstColumn();
+			int lastColumn = range.getLastColumn();
+			int firstRow = range.getFirstRow();
+			// int lastRow = range.getLastRow();
+			if (row == firstRow) {
+				if (column >= firstColumn && column <= lastColumn) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 获取合并单元格的值
+	 * 
+	 * @param sheet
+	 * @param row
+	 * @param column
+	 * @return
+	 */
+	public String getMergedRegionValue(Sheet sheet, int row, int column) {
+		int sheetMergeCount = sheet.getNumMergedRegions();
+
+		for (int i = 0; i < sheetMergeCount; i++) {
+			CellRangeAddress ca = sheet.getMergedRegion(i);
+			int firstColumn = ca.getFirstColumn();
+			int lastColumn = ca.getLastColumn();
+			int firstRow = ca.getFirstRow();
+			int lastRow = ca.getLastRow();
+
+			if (row >= firstRow && row <= lastRow) {
+
+				if (column >= firstColumn && column <= lastColumn) {
+					Row fRow = sheet.getRow(firstRow);
+					Cell fCell = fRow.getCell(firstColumn);
+					return getExcelCellValue(fCell);
+				}
+			}
+		}
+
+		return null;
+	}
+
+}
